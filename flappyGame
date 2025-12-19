@@ -1,0 +1,266 @@
+import sys
+import random
+import pygame
+
+# --------- Config ----------
+WIDTH, HEIGHT = 420, 680
+FPS = 60
+
+GRAVITY = 0.45
+FLAP_VELOCITY = -8.5
+
+PIPE_SPEED = 3.2
+PIPE_WIDTH = 74
+PIPE_GAP = 170
+PIPE_SPAWN_MS = 1350
+
+GROUND_HEIGHT = 90
+
+# Colors
+SKY = (135, 206, 235)
+GROUND = (222, 184, 135)
+GROUND_DARK = (205, 170, 125)
+PIPE_GREEN = (40, 170, 80)
+PIPE_DARK = (30, 130, 60)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+
+def clamp(n, lo, hi):
+    return max(lo, min(hi, n))
+
+
+class Bird:
+    def __init__(self):
+        self.x = WIDTH * 0.28
+        self.y = HEIGHT * 0.45
+        self.r = 16
+        self.vy = 0.0
+
+    def reset(self):
+        self.y = HEIGHT * 0.45
+        self.vy = 0.0
+
+    def flap(self):
+        self.vy = FLAP_VELOCITY
+
+    def update(self):
+        self.vy += GRAVITY
+        self.y += self.vy
+
+    def rect(self):
+        return pygame.Rect(int(self.x - self.r), int(self.y - self.r), self.r * 2, self.r * 2)
+
+    def draw(self, screen):
+        # Simple bird: yellow circle + tiny beak
+        pygame.draw.circle(screen, (255, 220, 60), (int(self.x), int(self.y)), self.r)
+        pygame.draw.circle(screen, BLACK, (int(self.x + 6), int(self.y - 5)), 3)
+        pygame.draw.polygon(
+            screen,
+            (255, 150, 50),
+            [(int(self.x + 12), int(self.y)), (int(self.x + 26), int(self.y + 4)), (int(self.x + 12), int(self.y + 8))],
+        )
+
+
+class PipePair:
+    def __init__(self, x):
+        self.x = x
+        # gap_y is the center of the gap
+        gap_center = random.randint(140, HEIGHT - GROUND_HEIGHT - 140)
+        self.gap_top = gap_center - PIPE_GAP // 2
+        self.gap_bottom = gap_center + PIPE_GAP // 2
+        self.passed = False  # for scoring
+
+    def update(self):
+        self.x -= PIPE_SPEED
+
+    def offscreen(self):
+        return self.x + PIPE_WIDTH < 0
+
+    def rects(self):
+        top_h = self.gap_top
+        bottom_y = self.gap_bottom
+        bottom_h = (HEIGHT - GROUND_HEIGHT) - bottom_y
+        top_rect = pygame.Rect(int(self.x), 0, PIPE_WIDTH, int(top_h))
+        bottom_rect = pygame.Rect(int(self.x), int(bottom_y), PIPE_WIDTH, int(bottom_h))
+        return top_rect, bottom_rect
+
+    def draw(self, screen):
+        top_rect, bottom_rect = self.rects()
+        # main pipe bodies
+        pygame.draw.rect(screen, PIPE_GREEN, top_rect)
+        pygame.draw.rect(screen, PIPE_GREEN, bottom_rect)
+        # pipe lips
+        lip_h = 16
+        top_lip = pygame.Rect(top_rect.x - 4, top_rect.bottom - lip_h, PIPE_WIDTH + 8, lip_h)
+        bottom_lip = pygame.Rect(bottom_rect.x - 4, bottom_rect.y, PIPE_WIDTH + 8, lip_h)
+        pygame.draw.rect(screen, PIPE_DARK, top_lip)
+        pygame.draw.rect(screen, PIPE_DARK, bottom_lip)
+        # subtle shading
+        shade_w = 10
+        pygame.draw.rect(screen, PIPE_DARK, pygame.Rect(top_rect.x, top_rect.y, shade_w, top_rect.height))
+        pygame.draw.rect(screen, PIPE_DARK, pygame.Rect(bottom_rect.x, bottom_rect.y, shade_w, bottom_rect.height))
+
+
+def draw_ground(screen, scroll):
+    ground_y = HEIGHT - GROUND_HEIGHT
+    pygame.draw.rect(screen, GROUND, (0, ground_y, WIDTH, GROUND_HEIGHT))
+    # stripes to simulate movement
+    stripe_w = 24
+    for i in range(-2, WIDTH // stripe_w + 3):
+        x = (i * stripe_w + scroll) % (stripe_w * 2)
+        pygame.draw.rect(screen, GROUND_DARK, (x, ground_y, stripe_w, GROUND_HEIGHT))
+
+
+def draw_text(screen, font, text, x, y, color=WHITE, center=True):
+    surf = font.render(text, True, color)
+    rect = surf.get_rect()
+    rect.center = (x, y) if center else (x, y)
+    screen.blit(surf, rect)
+
+
+def main():
+    pygame.init()
+    pygame.display.set_caption("Flappy Bird (Python)")
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    clock = pygame.time.Clock()
+
+    font_big = pygame.font.SysFont("arial", 44, bold=True)
+    font_med = pygame.font.SysFont("arial", 28, bold=True)
+    font_small = pygame.font.SysFont("arial", 20)
+
+    bird = Bird()
+    pipes = []
+    score = 0
+    best = 0
+
+    scroll = 0
+
+    # Game states
+    READY = "ready"
+    PLAYING = "playing"
+    GAME_OVER = "game_over"
+    state = READY
+
+    SPAWN_PIPE = pygame.USEREVENT + 1
+    pygame.time.set_timer(SPAWN_PIPE, PIPE_SPAWN_MS)
+
+    def reset_game():
+        nonlocal pipes, score, state
+        bird.reset()
+        pipes = []
+        score = 0
+        state = READY
+
+    reset_game()
+
+    while True:
+        dt = clock.tick(FPS)
+        scroll = (scroll - int(PIPE_SPEED * 3))  # ground scroll speed
+
+        # --------- Events ----------
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == SPAWN_PIPE and state == PLAYING:
+                pipes.append(PipePair(WIDTH + 10))
+
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_SPACE, pygame.K_UP):
+                    if state == READY:
+                        state = PLAYING
+                        bird.flap()
+                    elif state == PLAYING:
+                        bird.flap()
+                    elif state == GAME_OVER:
+                        reset_game()
+
+                if event.key == pygame.K_r:
+                    reset_game()
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if state == READY:
+                    state = PLAYING
+                    bird.flap()
+                elif state == PLAYING:
+                    bird.flap()
+                elif state == GAME_OVER:
+                    reset_game()
+
+        # --------- Update ----------
+        if state == PLAYING:
+            bird.update()
+
+            for p in pipes:
+                p.update()
+
+                # scoring when bird passes pipe center
+                if not p.passed and (p.x + PIPE_WIDTH) < bird.x:
+                    p.passed = True
+                    score += 1
+
+            # remove old pipes
+            pipes = [p for p in pipes if not p.offscreen()]
+
+            # collisions
+            bird_rect = bird.rect()
+
+            # hit ground / ceiling
+            if bird.y - bird.r < 0:
+                bird.y = bird.r
+                bird.vy = 0
+
+            if bird.y + bird.r >= HEIGHT - GROUND_HEIGHT:
+                state = GAME_OVER
+
+            for p in pipes:
+                top_rect, bottom_rect = p.rects()
+                if bird_rect.colliderect(top_rect) or bird_rect.colliderect(bottom_rect):
+                    state = GAME_OVER
+                    break
+
+            if state == GAME_OVER:
+                best = max(best, score)
+
+        # --------- Draw ----------
+        screen.fill(SKY)
+
+        # pipes
+        for p in pipes:
+            p.draw(screen)
+
+        # bird
+        bird.draw(screen)
+
+        # ground
+        draw_ground(screen, scroll)
+
+        # score UI
+        if state in (PLAYING, GAME_OVER):
+            draw_text(screen, font_big, str(score), WIDTH // 2, 80, WHITE)
+
+        if state == READY:
+            draw_text(screen, font_big, "FLAPPY", WIDTH // 2, 150)
+            draw_text(screen, font_big, "BIRD", WIDTH // 2, 200)
+            draw_text(screen, font_small, "Press SPACE / Click to start", WIDTH // 2, 270, WHITE)
+            draw_text(screen, font_small, "SPACE/Click to flap • R to reset", WIDTH // 2, 300, WHITE)
+
+        if state == GAME_OVER:
+            # overlay box
+            box = pygame.Rect(40, 220, WIDTH - 80, 200)
+            pygame.draw.rect(screen, (0, 0, 0, 0), box)
+            pygame.draw.rect(screen, (20, 30, 45), box, border_radius=12)
+            pygame.draw.rect(screen, (255, 255, 255), box, width=2, border_radius=12)
+
+            draw_text(screen, font_med, "GAME OVER", WIDTH // 2, 255)
+            draw_text(screen, font_small, f"Score: {score}", WIDTH // 2, 305)
+            draw_text(screen, font_small, f"Best: {best}", WIDTH // 2, 335)
+            draw_text(screen, font_small, "Press SPACE / Click to restart", WIDTH // 2, 385)
+
+        pygame.display.flip()
+
+
+if __name__ == "__main__":
+    main()
