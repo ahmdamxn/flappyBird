@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flappy Bird - Browser Edition</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Flappy Bird</div>
+      <div class="cta">Share the link so friends can play!</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="copy">
+          <h1>Tap, flap, and dodge pipes</h1>
+          <p>
+            A lightweight, sharable Flappy Bird clone that runs completely in your browser. Hit
+            <strong>Space</strong> or click/tap to start and flap. Refresh to reset or share the URL with
+            anyone to let them play instantly.
+          </p>
+          <ul>
+            <li><strong>Space / Click / Tap</strong> — Flap</li>
+            <li><strong>R</strong> — Reset at any time</li>
+          </ul>
+        </div>
+        <canvas id="game" width="420" height="680" aria-label="Flappy Bird game area"></canvas>
+      </section>
+      <section class="controls">
+        <button id="play" type="button">Start Game</button>
+        <div class="stats">
+          <span>Score: <strong id="score">0</strong></span>
+          <span>Best: <strong id="best">0</strong></span>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Built with vanilla JavaScript &amp; Canvas. Share this page to let anyone play.</p>
+    </footer>
+
+    <script src="game.js"></script>
+  </body>
+</html>
